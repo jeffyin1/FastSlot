@@ -19,7 +19,7 @@ public class Slot : MonoBehaviour
     private string accountAddress;
     private string accountPrivateKey; //遊戲開始輸入私鑰
     public int TANCoins;
-    public int BetTCoins;
+    public decimal BetTCoins;
     public int SlotResult;
     public int MineGasAmount = 60000; //輸入挖礦GasAmount預設1000000
     public int MineGasPrice = 1000000000; //輸入挖礦GasPrice預設1GWEI
@@ -55,14 +55,40 @@ public class Slot : MonoBehaviour
 
     public int StartSpin = 0;
     public int SpinType = 0;
+
+    private decimal m_baseAmount = new decimal(0.01);
+    private int m_constractMaxRatio = 10;
+
+    struct BetInfo
+    {
+        public BetInfo(int min, int max, int ratio, int winPic)
+        {
+            rangeMin = min;
+            rangeMax = max;
+            this.ratio = ratio;
+            winSpinPicNumber = winPic;
+        }
+        public int rangeMin;
+        public int rangeMax;
+        public int ratio;
+        public int winSpinPicNumber;
+    }
+    private BetInfo[] m_betInfos = new BetInfo[]
+    {
+        new BetInfo(0,0,10,1),
+        new BetInfo(1,3,4,2),
+        new BetInfo(4,5,3,3),
+        new BetInfo(6,10,2,4),
+        new BetInfo(11,20,1,5),
+    };
     #endregion
-    
+
     #region 智能合約
     //-----以下為智能合約資料----
     private string _urlMain = "https://testnet-rpc.tangerine-network.io";  //TAN 測試鏈網路
     //private string _urlMain = "https://mainnet-rpc.tangerine-network.io";  //TAN 主鏈網路
     private DeployContractTransactionBuilder contractTransactionBuilder = new DeployContractTransactionBuilder();
-    private static string ContractAddressTSlot = "0x50ab1918a2047263ea7FFBBD3AD50F2d2DCe6F6a"; //TAN 測試鏈合約地址
+    private static string ContractAddressTSlot = "0xdbf4f468bdFb597F61cA1147cB7F706F4B754a47"; //TAN 測試鏈合約地址
     private static string ABITSlot = @"[{""constant"":false,""inputs"":[],""name"":""play_game"",""outputs"":[],""payable"":true,""stateMutability"":""payable"",""type"":""function""},{""constant"":false,""inputs"":[],""name"":""rand"",""outputs"":[{""name"":"""",""type"":""uint256""}],""payable"":false,""stateMutability"":""nonpayable"",""type"":""function""},{""constant"":false,""inputs"":[{""name"":""_new_manager"",""type"":""address""}],""name"":""transferownership"",""outputs"":[],""payable"":false,""stateMutability"":""nonpayable"",""type"":""function""},{""constant"":false,""inputs"":[],""name"":""withdraw_all_ETH"",""outputs"":[],""payable"":false,""stateMutability"":""nonpayable"",""type"":""function""},{""constant"":false,""inputs"":[{""name"":""_eth_wei"",""type"":""uint256""}],""name"":""withdraw_ETH"",""outputs"":[],""payable"":false,""stateMutability"":""nonpayable"",""type"":""function""},{""inputs"":[],""payable"":true,""stateMutability"":""payable"",""type"":""constructor""},{""constant"":true,""inputs"":[],""name"":""balance"",""outputs"":[{""name"":"""",""type"":""uint256""}],""payable"":false,""stateMutability"":""view"",""type"":""function""},{""constant"":true,""inputs"":[],""name"":""maxNumber"",""outputs"":[{""name"":"""",""type"":""uint256""}],""payable"":false,""stateMutability"":""view"",""type"":""function""},{""constant"":true,""inputs"":[{""name"":"""",""type"":""uint256""}],""name"":""odds"",""outputs"":[{""name"":"""",""type"":""uint256""}],""payable"":false,""stateMutability"":""view"",""type"":""function""},{""constant"":true,""inputs"":[],""name"":""oddsNumber"",""outputs"":[{""name"":"""",""type"":""uint256""}],""payable"":false,""stateMutability"":""view"",""type"":""function""},{""constant"":true,""inputs"":[],""name"":""payment"",""outputs"":[{""name"":"""",""type"":""uint256""}],""payable"":false,""stateMutability"":""view"",""type"":""function""},{""constant"":true,""inputs"":[],""name"":""randonNumber"",""outputs"":[{""name"":"""",""type"":""uint256""}],""payable"":false,""stateMutability"":""view"",""type"":""function""}]";
     private Contract ContractTSlot;
 
@@ -208,19 +234,20 @@ public class Slot : MonoBehaviour
 
     #region 執行玩SLOT的合約
     //----以下是執行玩SLOT的函數---(調用執行函數)
-    public void PlaySlot(int BetAmount)
+    public void PlaySlot(int betRatio)
     {
+        decimal betAmount = new decimal(betRatio) * m_baseAmount;
         WINPanel.gameObject.SetActive(false);
         BIGPanel.gameObject.SetActive(false);
         MEGAPanel.gameObject.SetActive(false);
-        if (TANBalance < BetAmount)
+        if (TANBalance < betAmount)
         {
             TransactionText.text = "Not enough money to play SLOT！";
             NoEnoughTAN.gameObject.SetActive(true);
         }
         else
         {
-            if (TotalPrize < BetAmount * 50)
+            if (TotalPrize < betAmount * m_constractMaxRatio)
             {
                 TransactionText.text = "Prize pool not enough money to play SLOT！";
                 NoEnoughTAN.gameObject.SetActive(true);
@@ -229,17 +256,19 @@ public class Slot : MonoBehaviour
             {
                 LoadingPanel.gameObject.SetActive(true);
                 NoEnoughTAN.gameObject.SetActive(false);
-                StartCoroutine(PlaySlotGo(BetAmount));
-                BetTCoins = BetAmount;
+                StartCoroutine(PlaySlotGo(betAmount));
+                BetTCoins = betAmount;
                 WINAmount.text = "0";
-                TANAmount.text = Convert.ToInt16(Math.Floor(TANBalance - BetTCoins)).ToString("#0");
+                TANAmount.text = (TANBalance - BetTCoins).ToString("#0.00");
                 BlockBG.gameObject.SetActive(true);
             }
         }
     }
 
-    public IEnumerator PlaySlotGo(int BetAmount)
+    public IEnumerator PlaySlotGo(decimal BetAmount)
     {
+        var s = Nethereum.Util.UnitConversion.Convert.ToWei(BetAmount, 18).ToString();
+        Debug.Log("s" +s);
         var transactionInput = CreateBuyMaterialSlotInput(
             accountAddress,
             new HexBigInteger(MineGasAmount), //GasAmount
@@ -320,14 +349,23 @@ public class Slot : MonoBehaviour
             {
                 if (receiptRequest.Result != null)
                 {
-                    string txLogs = receiptRequest.Result.Logs[0]["data"].ToString();
-                    var txLogsHex = txLogs.RemoveHexPrefix();
-                    string AddressGet = txLogsHex.Substring(24, 40);
-                    string BetAmountGet = txLogsHex.Substring(64, 64);
-                    string RandomNOGet = txLogsHex.Substring(128, 64);
-                    SlotResult = int.Parse(RandomNOGet, System.Globalization.NumberStyles.AllowHexSpecifier);
-                    Debug.Log("Slot結果1:" + txLogsHex);
-                    Debug.Log("Slot結果2:地址:0X" + AddressGet + "/投注" + BetTCoins + "TAN/開出號碼:" + SlotResult);
+                    if (receiptRequest.Result.Logs.Count == 0)
+                    {
+                        Debug.LogError(receiptRequest.Result.ToString());
+                        yield return new WaitForSeconds(0.5f);
+                    }
+                    else
+                    {
+                        string txLogs = receiptRequest.Result.Logs[0]["data"].ToString();
+                        var txLogsHex = txLogs.RemoveHexPrefix();
+                        string AddressGet = txLogsHex.Substring(24, 40);
+                        string BetAmountGet = txLogsHex.Substring(64, 64);
+                        string RandomNOGet = txLogsHex.Substring(128, 64);
+                        SlotResult = int.Parse(RandomNOGet, System.Globalization.NumberStyles.AllowHexSpecifier);
+                        Debug.Log("Slot結果1:" + txLogsHex);
+                        Debug.Log("Slot結果2:地址:0X" + AddressGet + "/投注" + BetTCoins + "TAN/開出號碼:" + SlotResult);
+                    }
+                    
                     var txType = "mined";
                     if (txType == "mined")
                     {
@@ -356,7 +394,7 @@ public class Slot : MonoBehaviour
     public void ReloadBalance()
     {
         StartCoroutine(getAccountBalance(accountAddress, (balance) => {     //執行檢查主網ETH的餘額
-            TANAmount.text = Convert.ToInt16(Math.Floor(balance)).ToString("#0");
+            TANAmount.text = (balance).ToString("#0.00");
             TANBalance = balance;
             Debug.Log(balance);
             BlockBG.gameObject.SetActive(false);
@@ -385,16 +423,16 @@ public class Slot : MonoBehaviour
     public void ReloadPollBalance()
     {
         StartCoroutine(getAccountBalance(ContractAddressTSlot, (balance) => {     //執行檢查主網ETH的餘額
-            TotalPrizeAmount.text = Convert.ToInt16(Math.Floor(balance)).ToString("#0");
+            TotalPrizeAmount.text = balance.ToString("#0.00");
             TotalPrize = balance;
-            Debug.Log(balance);
+            Debug.LogFormat("contract:{0},address:{1}",balance, ContractAddressTSlot);
         }));
     }
     //--------------取得合約地址TAN餘額---(查詢)
     #endregion
 
     #region Slot主要功能
-    public void SpinStart(int BetAmount)
+    public void SpinStart(decimal BetAmount)
     {
         if (TANBalance < BetAmount)
         {
@@ -479,64 +517,20 @@ public class Slot : MonoBehaviour
         SpinLineIcon[4].gameObject.GetComponent<Image>().sprite = IconSpin[LowerIcon2]; //圖示改為亂數對應圖案
         SpinLineIcon[5].gameObject.GetComponent<Image>().sprite = IconSpin[LowerIcon3]; //圖示改為亂數對應圖案
 
-        int WinrandomSpin = 0;
-        if(SlotResult == 0)
+        int WinrandomSpin = -1;
+        foreach ( var rBet in m_betInfos)
         {
-            WinrandomSpin = 0;
-            WINAmount.text = (BetTCoins * 50).ToString();
-            TransactionText.text = "玩家贏了" + (BetTCoins * 50).ToString() + "TAN！";
-            MEGAPanel.gameObject.SetActive(true);
+            if(SlotResult <= rBet.rangeMax && SlotResult >= rBet.rangeMin)
+            {
+                WinrandomSpin = rBet.winSpinPicNumber;
+                WINAmount.text = (BetTCoins * rBet.ratio).ToString();
+                TransactionText.text = "玩家贏了" + (BetTCoins * rBet.ratio).ToString() + "TAN！";
+                MEGAPanel.gameObject.SetActive(true);
+                break;
+            }
         }
-        else if (SlotResult == 1)
-        {
-            WinrandomSpin = 1;
-            WINAmount.text = (BetTCoins * 20).ToString();
-            TransactionText.text = "玩家贏了" + (BetTCoins * 20).ToString() + "TAN！";
-            BIGPanel.gameObject.SetActive(true);
-        }
-        else if (SlotResult == 2)
-        {
-            WinrandomSpin = 2;
-            WINAmount.text = (BetTCoins * 10).ToString();
-            TransactionText.text = "玩家贏了" + (BetTCoins * 10).ToString() + "TAN！";
-            BIGPanel.gameObject.SetActive(true);
-        }
-        else if (SlotResult == 3)
-        {
-            WinrandomSpin = 3;
-            WINAmount.text = (BetTCoins * 8).ToString();
-            TransactionText.text = "玩家贏了" + (BetTCoins * 8).ToString() + "TAN！";
-            BIGPanel.gameObject.SetActive(true);
-        }
-        else if (SlotResult == 4)
-        {
-            WinrandomSpin = 4;
-            WINAmount.text = (BetTCoins * 5).ToString();
-            TransactionText.text = "玩家贏了" + (BetTCoins * 5).ToString() + "TAN！";
-            WINPanel.gameObject.SetActive(true);
-        }
-        else if (SlotResult == 5)
-        {
-            WinrandomSpin = 5;
-            WINAmount.text = (BetTCoins * 3).ToString();
-            TransactionText.text = "玩家贏了" + (BetTCoins * 3).ToString() + "TAN！";
-            WINPanel.gameObject.SetActive(true);
-        }
-        else if (SlotResult >= 6 && SlotResult <= 10)
-        {
-            WinrandomSpin = 6;
-            WINAmount.text = (BetTCoins * 2).ToString();
-            TransactionText.text = "玩家贏了" + (BetTCoins * 2).ToString() + "TAN！";
-            WINPanel.gameObject.SetActive(true);
-        }
-        else if (SlotResult >= 11 && SlotResult <= 20)
-        {
-            WinrandomSpin = 7;
-            WINAmount.text = (BetTCoins * 1).ToString();
-            TransactionText.text = "玩家贏了" + (BetTCoins * 1).ToString() + "TAN！";
-            WINPanel.gameObject.SetActive(true);
-        }
-        else if (SlotResult >= 21)
+
+        if (WinrandomSpin == -1)
         {
             WinrandomSpin = 8;
             WINAmount.text = "0";
